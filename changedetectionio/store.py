@@ -372,7 +372,9 @@ class ChangeDetectionStore:
         if not os.path.isdir(output_path):
             mkdir(output_path)
 
-        fname = "{}/{}.stripped.txt".format(output_path, uuid.uuid4())
+        suffix = "stripped.txt"
+
+        fname = "{}/{}.{}".format(output_path, uuid.uuid4(), suffix)
         with open(fname, 'wb') as f:
             f.write(contents)
             f.close()

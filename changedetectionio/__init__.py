@@ -695,6 +695,10 @@ def changedetection_app(config=None, datastore_o=None):
     @app.route("/diff/<string:uuid>", methods=['GET'])
     @login_required
     def diff_history_page(uuid):
+        from changedetectionio import content_fetcher
+
+        newest_version_file_contents = ""
+        previous_version_file_contents = ""
 
         # More for testing, possible to return the first/only
         if uuid == 'first':
@@ -720,21 +724,28 @@ def changedetection_app(config=None, datastore_o=None):
 
         # Save the current newest history as the most recently viewed
         datastore.set_last_viewed(uuid, dates[0])
-        newest_file = watch['history'][dates[0]]
-        with open(newest_file, 'r') as f:
-            newest_version_file_contents = f.read()
 
         previous_version = request.args.get('previous_version')
-        try:
-            previous_file = watch['history'][previous_version]
-        except KeyError:
-            # Not present, use a default value, the second one in the sorted list.
-            previous_file = watch['history'][dates[1]]
+        if ('content-type' in watch and content_fetcher.supported_binary_type(watch['content-type'])):
+            template = "diff-image.html"
+        else:
+            newest_file = watch['history'][dates[0]]
+            with open(newest_file, 'r') as f:
+                newest_version_file_contents = f.read()
 
-        with open(previous_file, 'r') as f:
-            previous_version_file_contents = f.read()
+            try:
+                previous_file = watch['history'][previous_version]
+            except KeyError:
+                # Not present, use a default value, the second one in the sorted list.
+                previous_file = watch['history'][dates[1]]
 
-        output = render_template("diff.html", watch_a=watch,
+            with open(previous_file, 'r') as f:
+                previous_version_file_contents = f.read()
+
+            template = "diff.html"
+
+        output = render_template(template,
+                                 watch_a=watch,
                                  newest=newest_version_file_contents,
                                  previous=previous_version_file_contents,
                                  extra_stylesheets=extra_stylesheets,
@@ -751,6 +762,7 @@ def changedetection_app(config=None, datastore_o=None):
     @app.route("/preview/<string:uuid>", methods=['GET'])
     @login_required
     def preview_page(uuid):
+        from changedetectionio import content_fetcher
 
         # More for testing, possible to return the first/only
         if uuid == 'first':
@@ -765,14 +777,25 @@ def changedetection_app(config=None, datastore_o=None):
             return redirect(url_for('index'))
 
         newest = list(watch['history'].keys())[-1]
-        with open(watch['history'][newest], 'r') as f:
-            content = f.readlines()
+        fname = watch['history'][newest]
+
+        if ('content-type' in watch and content_fetcher.supported_binary_type(watch['content-type'])):
+            template = "preview-image.html"
+            content = fname
+        else:
+            template = "preview.html"
+            try:
+                with open(fname, 'r') as f:
+                    content = f.read()
+            except:
+                content = "Cant read {}".format(fname)
 
         output = render_template("preview.html",
                                  content=content,
                                  extra_stylesheets=extra_stylesheets,
                                  current_diff_url=watch['url'],
-                                 uuid=uuid)
+                                 uuid=uuid,
+                                 watch=watch)
         return output
 
     @app.route("/settings/notification-logs", methods=['GET'])
@@ -783,6 +806,50 @@ def changedetection_app(config=None, datastore_o=None):
                                  logs=notification_debug_log if len(notification_debug_log) else ["No errors or warnings detected"])
 
         return output
+
+
+    # render an image which contains the diff of two images
+    # We always compare the newest against whatever compare_date we are given
+    @app.route("/diff/show-image/<string:uuid>/<string:datestr>")
+    def show_single_image(uuid, datestr):
+
+        from flask import make_response
+        watch = datastore.data['watching'][uuid]
+
+        if datestr == 'None' or datestr is None:
+            datestr = list(watch['history'].keys())[0]
+
+        fname = watch['history'][datestr]
+        with open(fname, 'rb') as f:
+            resp = make_response(f.read())
+            
+        # @todo assumption here about the type, re-encode? detect?
+        resp.headers['Content-Type'] = 'image/jpeg'
+        return resp
+
+    # render an image which contains the diff of two images
+    # We always compare the newest against whatever compare_date we are given
+    @app.route("/diff/image/<string:uuid>/<string:compare_date>")
+    def render_diff_image(uuid, compare_date):
+        from changedetectionio import image_diff
+
+        from flask import make_response
+        watch = datastore.data['watching'][uuid]
+        newest = list(watch['history'].keys())[-1]
+
+        # @todo this is weird
+        if compare_date == 'None' or compare_date is None:
+            compare_date = list(watch['history'].keys())[0]
+
+        new_img = watch['history'][newest]
+        prev_img = watch['history'][compare_date]
+        img = image_diff.render_diff(new_img, prev_img)
+
+        resp = make_response(img)
+        resp.headers['Content-Type'] = 'image/jpeg'
+        return resp
+
+
     @app.route("/api/<string:uuid>/snapshot/current", methods=['GET'])
     @login_required
     def api_snapshot(uuid):
