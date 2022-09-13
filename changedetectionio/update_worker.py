@@ -120,9 +120,9 @@ class update_worker(threading.Thread):
                 os.unlink(full_path)
 
     def run(self):
-        from changedetectionio import fetch_site_status
+        from .fetch_processor import json_html_plaintext
 
-        update_handler = fetch_site_status.perform_site_check(datastore=self.datastore)
+
 
         while not self.app.config.exit.is_set():
 
@@ -135,21 +135,20 @@ class update_worker(threading.Thread):
                 self.current_uuid = uuid
 
                 if uuid in list(self.datastore.data['watching'].keys()):
+                    update_handler = None # Interface object
                     changed_detected = False
-                    contents = b''
-                    screenshot = False
                     update_obj= {}
-                    xpath_data = False
                     process_changedetection_results = True
                     print("> Processing UUID {} Priority {} URL {}".format(uuid, priority, self.datastore.data['watching'][uuid]['url']))
                     now = time.time()
 
                     try:
-                        changed_detected, update_obj, contents = update_handler.run(uuid)
+                        update_handler = json_html_plaintext.perform_site_check(datastore=self.datastore)
+                        changed_detected, update_obj = update_handler.run(uuid)
                         # Re #342
                         # In Python 3, all strings are sequences of Unicode characters. There is a bytes type that holds raw bytes.
                         # We then convert/.decode('utf-8') for the notification etc
-                        if not isinstance(contents, (bytes, bytearray)):
+                        if not isinstance(update_handler.contents, (bytes, bytearray)):
                             raise Exception("Error - returned data from the fetch handler SHOULD be bytes")
                     except PermissionError as e:
                         self.app.logger.error("File permission error updating", uuid, str(e))
@@ -257,12 +256,11 @@ class update_worker(threading.Thread):
                     if process_changedetection_results:
                         try:
                             watch = self.datastore.data['watching'][uuid]
-                            fname = "" # Saved history text filename
 
                             # For the FIRST time we check a site, or a change detected, save the snapshot.
                             if changed_detected or not watch['last_checked']:
                                 # A change was detected
-                                watch.save_history_text(contents=contents, timestamp=str(round(time.time())))
+                                watch.save_history_artifact(contents=update_handler.contents, timestamp=str(round(time.time())), suffix=update_handler.history_artifact_suffix)
 
                             self.datastore.update_watch(uuid=uuid, update_obj=update_obj)
 
