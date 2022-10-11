@@ -21,7 +21,6 @@ class Non200ErrorCodeReceived(Exception):
             self.page_text = html_tools.html_to_text(page_html)
         return
 
-
 class JSActionExceptions(Exception):
     def __init__(self, status_code, url, screenshot, message=''):
         self.status_code = status_code
@@ -66,13 +65,14 @@ class ReplyWithContentButNoText(Exception):
         return
 
 class Fetcher():
-    error = None
-    status_code = None
     content = None
-    headers = None
-
+    error = None
     fetcher_description = "No description"
+    headers = None
+    raw_content = None
+    status_code = None
     webdriver_js_execute_code = None
+
     xpath_element_js = """               
                 // Include the getXpath script directly, easier than fetching
                 !function(e,n){"object"==typeof exports&&"undefined"!=typeof module?module.exports=n():"function"==typeof define&&define.amd?define(n):(e=e||self).getXPath=n()}(this,function(){return function(e){var n=e;if(n&&n.id)return'//*[@id="'+n.id+'"]';for(var o=[];n&&Node.ELEMENT_NODE===n.nodeType;){for(var i=0,r=!1,d=n.previousSibling;d;)d.nodeType!==Node.DOCUMENT_TYPE_NODE&&d.nodeName===n.nodeName&&i++,d=d.previousSibling;for(d=n.nextSibling;d;){if(d.nodeName===n.nodeName){r=!0;break}d=d.nextSibling}o.push((n.prefix?n.prefix+":":"")+n.localName+(i||r?"["+(i+1)+"]":"")),n=n.parentNode}return o.length?"/"+o.reverse().join("/"):""}});
@@ -202,6 +202,7 @@ class Fetcher():
 
     # Will be needed in the future by the VisualSelector, always get this where possible.
     screenshot = False
+    element_screenshot = None
     system_http_proxy = os.getenv('HTTP_PROXY')
     system_https_proxy = os.getenv('HTTPS_PROXY')
 
@@ -310,7 +311,8 @@ class base_html_playwright(Fetcher):
             request_body,
             request_method,
             ignore_status_codes=False,
-            current_css_filter=None):
+            current_css_filter=None
+            ):
 
         from playwright.sync_api import sync_playwright
         import playwright._impl._api_types
@@ -410,11 +412,18 @@ class base_html_playwright(Fetcher):
             page.wait_for_timeout(500)
 
             self.content = page.content()
+            self.raw_content = page.content()
+
             self.status_code = response.status
             self.headers = response.all_headers()
 
-            if current_css_filter is not None:
+            if current_css_filter is not None and len(current_css_filter):
                 page.evaluate("var css_filter={}".format(json.dumps(current_css_filter)))
+
+                el = page.locator(current_css_filter)
+                if el:
+                    el.scroll_into_view_if_needed()
+                    self.element_screenshot = el.screenshot()
             else:
                 page.evaluate("var css_filter=''")
 
@@ -429,9 +438,9 @@ class base_html_playwright(Fetcher):
             # acceptable screenshot quality here
             try:
                 # Quality set to 1 because it's not used, just used as a work-around for a bug, no need to change this.
-                page.screenshot(type='jpeg', clip={'x': 1.0, 'y': 1.0, 'width': 1280, 'height': 1024}, quality=1)
+                #page.screenshot(type='jpeg', clip={'x': 1.0, 'y': 1.0, 'width': 1280, 'height': 1024}, quality=1)
                 # The actual screenshot
-                self.screenshot = page.screenshot(type='jpeg', full_page=True, quality=int(os.getenv("PLAYWRIGHT_SCREENSHOT_QUALITY", 72)))
+                self.screenshot = page.screenshot(type='jpeg', full_page=True, quality=int(os.getenv("PLAYWRIGHT_SCREENSHOT_QUALITY", 82)))
             except Exception as e:
                 context.close()
                 browser.close()
@@ -533,6 +542,7 @@ class base_html_webdriver(Fetcher):
         # @todo - dom wait loaded?
         time.sleep(int(os.getenv("WEBDRIVER_DELAY_BEFORE_CONTENT_READY", 5)) + self.render_extract_delay)
         self.content = self.driver.page_source
+        self.raw_content = self.driver.page_source
         self.headers = {}
 
         self.screenshot = self.driver.get_screenshot_as_png()
@@ -619,6 +629,7 @@ class html_requests(Fetcher):
 
         self.status_code = r.status_code
         self.content = r.text
+        self.raw_content = r.content
         self.headers = r.headers
 
 

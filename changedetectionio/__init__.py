@@ -396,18 +396,20 @@ def changedetection_app(config=None, datastore_o=None):
         existing_tags = datastore.get_all_tags()
 
         form = forms.quickWatchForm(request.form)
+        webdriver_enabled = True if os.getenv('PLAYWRIGHT_DRIVER_URL', False) or os.getenv('PLAYWRIGHT_DRIVER_URL', False) else False
+
         output = render_template("watch-overview.html",
-                                 form=form,
-                                 watches=sorted_watches,
-                                 tags=existing_tags,
                                  active_tag=limit_tag,
                                  app_rss_token=datastore.data['settings']['application']['rss_access_token'],
-                                 has_unviewed=datastore.has_unviewed,
-                                 # Don't link to hosting when we're on the hosting environment
-                                 hosted_sticky=os.getenv("SALTED_PASS", False) == False,
+                                 form=form,
                                  guid=datastore.data['app_guid'],
-                                 queued_uuids=[uuid for p,uuid in update_q.queue])
-
+                                 has_unviewed=datastore.has_unviewed,
+                                 hosted_sticky=os.getenv("SALTED_PASS", False) == False,
+                                 queued_uuids=[uuid for p, uuid in update_q.queue],
+                                 tags=existing_tags,
+                                 watches=sorted_watches,
+                                 webdriver_enabled=webdriver_enabled
+                                 )
 
         if session.get('share-link'):
             del(session['share-link'])
@@ -489,7 +491,7 @@ def changedetection_app(config=None, datastore_o=None):
 
         import hashlib
 
-        from changedetectionio import fetch_site_status
+        from .fetch_processor import json_html_plaintext
 
         # Get the most recent one
         newest_history_key = datastore.data['watching'][uuid].get('newest_history_key')
@@ -503,7 +505,7 @@ def changedetection_app(config=None, datastore_o=None):
                       encoding='utf-8') as file:
                 raw_content = file.read()
 
-                handler = fetch_site_status.perform_site_check(datastore=datastore)
+                handler = json_html_plaintext.perform_site_check(datastore=datastore)
                 stripped_content = html_tools.strip_ignore_text(raw_content,
                                                              datastore.data['watching'][uuid]['ignore_text'])
 
@@ -636,20 +638,31 @@ def changedetection_app(config=None, datastore_o=None):
             # Only works reliably with Playwright
             visualselector_enabled = os.getenv('PLAYWRIGHT_DRIVER_URL', False) and default['fetch_backend'] == 'html_webdriver'
 
+            watch = datastore.data['watching'].get(uuid)
+
+            # Which tabs to show/hide ?
+            enabled_tabs = []
+            if watch.get('fetch_processor') == 'json_html_plaintext' or not watch.get('fetch_processor'):
+                enabled_tabs.append('visual-selector')
+                enabled_tabs.append('text-filters-and-triggers')
+
+            if watch.get('fetch_processor') == 'image':
+                enabled_tabs.append('visual-selector')
 
             output = render_template("edit.html",
-                                     uuid=uuid,
-                                     watch=datastore.data['watching'][uuid],
-                                     form=form,
-                                     has_empty_checktime=using_default_check_time,
-                                     has_default_notification_urls=True if len(datastore.data['settings']['application']['notification_urls']) else False,
-                                     using_global_webdriver_wait=default['webdriver_delay'] is None,
                                      current_base_url=datastore.data['settings']['application']['base_url'],
                                      emailprefix=os.getenv('NOTIFICATION_MAIL_BUTTON_PREFIX', False),
+                                     enabled_tabs = enabled_tabs,
+                                     form=form,
+                                     has_default_notification_urls=True if len(datastore.data['settings']['application']['notification_urls']) else False,
+                                     has_empty_checktime=using_default_check_time,
+                                     playwright_enabled=os.getenv('PLAYWRIGHT_DRIVER_URL', False),
                                      settings_application=datastore.data['settings']['application'],
+                                     using_global_webdriver_wait=default['webdriver_delay'] is None,
+                                     uuid=uuid,
                                      visualselector_data_is_ready=visualselector_data_is_ready,
                                      visualselector_enabled=visualselector_enabled,
-                                     playwright_enabled=os.getenv('PLAYWRIGHT_DRIVER_URL', False)
+                                     watch=watch,
                                      )
 
         return output
@@ -781,6 +794,86 @@ def changedetection_app(config=None, datastore_o=None):
             datastore.set_last_viewed(watch_uuid, int(time.time()))
 
         return redirect(url_for('index'))
+
+
+    @app.route("/diff/image/<string:uuid>", methods=['GET'])
+    @login_required
+    def diff_image_history_page(uuid):
+
+        # More for testing, possible to return the first/only
+        if uuid == 'first':
+            uuid = list(datastore.data['watching'].keys()).pop()
+
+        extra_stylesheets = [url_for('static_content', group='styles', filename='diff.css')]
+        try:
+            watch = datastore.data['watching'][uuid]
+        except KeyError:
+            flash("No history found for the specified link, bad link?", "error")
+            return redirect(url_for('index'))
+
+        history = watch.history
+        dates = list(history.keys())
+
+        if len(dates) < 2:
+            flash("Not enough saved change detection snapshots to produce a report.", "error")
+            return redirect(url_for('index'))
+
+        previous_version = dates[-2]
+
+        datastore.set_last_viewed(uuid, time.time())
+
+        output = render_template("diff-image.html",
+                                 watch=watch,
+                                 extra_stylesheets=extra_stylesheets,
+                                 versions=dates[:-1], # All except current/last
+                                 uuid=uuid,
+                                 newest_version_timestamp=dates[-1],
+                                 current_previous_version=str(previous_version),
+                                 current_diff_url=watch['url'],
+                                 extra_title=" - Diff - {}".format(watch['title'] if watch['title'] else watch['url']),
+                                 left_sticky=True,
+                                 last_error=watch['last_error'],
+                                 last_error_text=watch.get_error_text(),
+                                 last_error_screenshot=watch.get_error_snapshot()
+                                 )
+        return output
+
+
+    @app.route("/preview/image/<string:uuid>", methods=['GET'])
+    @login_required
+    def preview_image_history_page(uuid):
+
+        # More for testing, possible to return the first/only
+        if uuid == 'first':
+            uuid = list(datastore.data['watching'].keys()).pop()
+
+        extra_stylesheets = [url_for('static_content', group='styles', filename='diff.css')]
+        try:
+            watch = datastore.data['watching'][uuid]
+        except KeyError:
+            flash("No history found for the specified link, bad link?", "error")
+            return redirect(url_for('index'))
+
+        history = watch.history
+        dates = list(history.keys())
+
+        if len(dates) < 1:
+            flash("Not enough saved change detection snapshots to produce a report.", "error")
+            return redirect(url_for('index'))
+
+        output = render_template("preview-image.html",
+                                 watch=watch,
+                                 extra_stylesheets=extra_stylesheets,
+                                 uuid=uuid,
+                                 current_diff_url=watch['url'],
+                                 newest_history_key = watch.newest_history_key,
+                                 extra_title=" - Diff - {}".format(watch['title'] if watch['title'] else watch['url']),
+                                 left_sticky=True,
+                                 last_error=watch['last_error'],
+                                 last_error_text=watch.get_error_text(),
+                                 last_error_screenshot=watch.get_error_snapshot()
+                                 )
+        return output
 
     @app.route("/diff/<string:uuid>", methods=['GET'])
     @login_required
@@ -947,6 +1040,67 @@ def changedetection_app(config=None, datastore_o=None):
 
         return output
 
+    @app.route("/preview/image/<string:uuid>/<string:history_timestamp>")
+    def render_single_image(uuid, history_timestamp):
+
+        watch = datastore.data['watching'].get(uuid)
+        dates = list(watch.history.keys())
+
+
+        if not history_timestamp or history_timestamp == 'None':
+            history_timestamp = dates[-2]
+
+
+        filename = watch.history[history_timestamp]
+        with open(filename, 'rb') as f:
+            img = f.read()
+
+        response = make_response(img)
+
+        response.headers['Content-type'] = 'image/png'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = 0
+
+        return response
+
+
+
+    # Diff renderer for images
+    # Renders the diff which includes the red box around what changes
+    # We always compare the newest against whatever compare_date we are given
+    @app.route("/diff/image/<string:uuid>/<string:compare_date>")
+    def render_diff_image(uuid, compare_date):
+        from changedetectionio import image_diff
+
+        from flask import make_response
+        watch = datastore.data['watching'].get(uuid)
+
+        dates = list(watch.history.keys())
+        if len(dates) < 2:
+            flash("Not enough saved change detection snapshots to produce a report.", "error")
+            return redirect(url_for('index'))
+
+        if not compare_date or compare_date == 'None':
+            compare_date = dates[-2]
+
+        new_img = watch.history[watch.newest_history_key]
+        prev_img = watch.history[compare_date]
+
+        try:
+            img = image_diff.render_diff(new_img, prev_img)
+        except ValueError as e:
+            print ("EXCEPTION: Diff image - got exception {} reverting to raw image without rendering difference".format(str(e)))
+            with open(new_img, 'rb') as f:
+                img = f.read()
+
+
+        resp = make_response(img)
+        resp.headers['Content-Type'] = 'image/jpeg'
+        return resp
+
+
+
     @app.route("/settings/notification-logs", methods=['GET'])
     @login_required
     def notification_logs():
@@ -1095,12 +1249,24 @@ def changedetection_app(config=None, datastore_o=None):
             return redirect(url_for('index'))
 
         url = request.form.get('url').strip()
+
         if datastore.url_exists(url):
             flash('The URL {} already exists'.format(url), "error")
             return redirect(url_for('index'))
 
         add_paused = request.form.get('edit_and_watch_submit_button') != None
-        new_uuid = datastore.add_watch(url=url, tag=request.form.get('tag').strip(), extras={'paused': add_paused})
+        fetch_processor = request.form.get('fetch_processor')
+
+        extras = {'paused': add_paused}
+        if fetch_processor:
+            extras['fetch_processor']=fetch_processor
+            if fetch_processor == 'image':
+                extras['fetch_backend'] = 'html_webdriver'
+
+        new_uuid = datastore.add_watch(url=url,
+                                       tag=request.form.get('tag').strip(),
+                                       extras=extras
+                                       )
 
 
         if not add_paused and new_uuid:

@@ -9,16 +9,18 @@ from changedetectionio import content_fetcher, html_tools
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from . import fetch_processor
 
 # Some common stuff here that can be moved to a base class
 # (set_proxy_from_list)
-class perform_site_check():
+class perform_site_check(fetch_processor):
     screenshot = None
     xpath_data = None
 
     def __init__(self, *args, datastore, **kwargs):
-        super().__init__(*args, **kwargs)
         self.datastore = datastore
+        super().__init__(*args, **kwargs)
+
 
     # Doesn't look like python supports forward slash auto enclosure in re.findall
     # So convert it to inline flag "foobar(?i)" type configuration
@@ -294,4 +296,6 @@ class perform_site_check():
         if not watch.get('previous_md5'):
             watch['previous_md5'] = fetched_md5
 
-        return changed_detected, update_obj, text_content_before_ignored_filter
+        self.contents = text_content_before_ignored_filter
+
+        return changed_detected, update_obj

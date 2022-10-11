@@ -15,10 +15,18 @@
                 <div>
                     {{ render_simple_field(form.url, placeholder="https://...", required=true) }}
                     {{ render_simple_field(form.tag, value=active_tag if active_tag else '', placeholder="watch group") }}
+                    <span>
+                        {{ render_simple_field(form.watch_submit_button, title="Watch this URL!" ) }}
+                        {{ render_simple_field(form.edit_and_watch_submit_button, title="Edit first then Watch") }}
+                    </span>
+                    {% if webdriver_enabled %}
+                    <div id="quickwatch-fetch-processor">
+                        {{ render_field(form.fetch_processor) }}
+                    </div>
+                    {% endif %}
                 </div>
                 <div>
-                    {{ render_simple_field(form.watch_submit_button, title="Watch this URL!" ) }}
-                    {{ render_simple_field(form.edit_and_watch_submit_button, title="Edit first then Watch") }}
+
                 </div>
             </div>
         </fieldset>
@@ -87,11 +95,11 @@
                     <a class="state-{{'on' if watch.notification_muted}}" href="{{url_for('index', op='mute', uuid=watch.uuid, tag=active_tag)}}"><img src="{{url_for('static_content', group='images', filename='bell-off.svg')}}" alt="Mute notifications" title="Mute notifications"/></a>
                 </td>
                 <td class="title-col inline">{{watch.title if watch.title is not none and watch.title|length > 0 else watch.url}}
-                    <a class="external" target="_blank" rel="noopener" href="{{ watch.url.replace('source:','') }}"></a>
-                    <a href="{{url_for('form_share_put_watch', uuid=watch.uuid)}}"><img style="height: 1em;display:inline-block;" src="{{url_for('static_content', group='images', filename='spread.svg')}}" /></a>
+                    <a class="external" title="Open in new window" target="_blank" rel="noopener" href="{{ watch.url.replace('source:','') }}"></a>
+                    <a href="{{url_for('form_share_put_watch', uuid=watch.uuid)}}"><img style="height: 1em;display:inline-block;" src="{{url_for('static_content', group='images', filename='spread.svg')}}" alt="Share" title="Share"/></a>
 
-                    {%if watch.fetch_backend == "html_webdriver" %}<img style="height: 1em; display:inline-block;" src="{{url_for('static_content', group='images', filename='Google-Chrome-icon.png')}}" />{% endif %}
-
+                    {%if watch.fetch_backend == "html_webdriver" %}<img style="height: 1em; display:inline-block;" src="{{url_for('static_content', group='images', filename='Google-Chrome-icon.png')}}" alt="Fetching with Chrome" title="Fetching with Chrome"/>{% endif %}
+                    {%if watch.fetch_processor == "image" %}<img style="height: 1em; display:inline-block;" src="{{url_for('static_content', group='images', filename='picture-frame.svg')}}" alt="Comparing graphically" title="Comparing graphically"/>{% endif %}
                     {% if watch.last_error is defined and watch.last_error != False %}
                     <div class="fetch-error">{{ watch.last_error }}</div>
                     {% endif %}
@@ -114,10 +122,20 @@
                        class="recheck pure-button button-small pure-button-primary">{% if watch.uuid in queued_uuids %}Queued{% else %}Recheck{% endif %}</a>
                     <a href="{{ url_for('edit_page', uuid=watch.uuid)}}" class="pure-button button-small pure-button-primary">Edit</a>
                     {% if watch.history_n >= 2 %}
-                    <a href="{{ url_for('diff_history_page', uuid=watch.uuid) }}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary diff-link">Diff</a>
+                      {% if watch.fetch_processor == "image" or watch.fetch_processor == "rendered_webpage" %}
+                        <a href="{{ url_for('diff_image_history_page', uuid=watch.uuid) }}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary diff-link">Diff</a>
+                      {% else %}
+                        <a href="{{ url_for('diff_history_page', uuid=watch.uuid) }}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary diff-link">Diff</a>
+                      {% endif %}
+
                     {% else %}
                         {% if watch.history_n == 1 or (watch.history_n ==0 and watch.error_text_ctime )%}
-                            <a href="{{ url_for('preview_page', uuid=watch.uuid)}}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary">Preview</a>
+
+                    {% if watch.fetch_processor == "image" or watch.fetch_processor == "rendered_webpage" %}
+                        <a href="{{ url_for('preview_image_history_page', uuid=watch.uuid) }}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary diff-link">Preview</a>
+                      {% else %}
+                        <a href="{{ url_for('preview_page', uuid=watch.uuid)}}" target="{{watch.uuid}}" class="pure-button button-small pure-button-primary">Preview</a>
+                      {% endif %}
                         {% endif %}
                     {% endif %}
                 </td>

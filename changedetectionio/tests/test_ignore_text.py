@@ -11,7 +11,7 @@ def test_setup(live_server):
 # Unit test of the stripper
 # Always we are dealing in utf-8
 def test_strip_text_func():
-    from changedetectionio import fetch_site_status
+    from ..fetch_processor import json_html_plaintext
 
     test_content = """
     Some content
@@ -23,7 +23,9 @@ def test_strip_text_func():
 
     ignore_lines = ["sometimes"]
 
-    fetcher = fetch_site_status.perform_site_check(datastore=False)
+    from ..fetch_processor import json_html_plaintext
+
+    fetcher = json_html_plaintext.perform_site_check(datastore=False)
     stripped_content = html_tools.strip_ignore_text(test_content, ignore_lines)
 
     assert b"sometimes" not in stripped_content
