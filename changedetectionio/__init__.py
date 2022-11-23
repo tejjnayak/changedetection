@@ -566,23 +566,12 @@ def changedetection_app(config=None, datastore_o=None):
             for p in datastore.proxy_list:
                 form.proxy.choices.append(tuple((p, datastore.proxy_list[p]['label'])))
 
-
         if request.method == 'POST' and form.validate():
             extra_update_obj = {}
 
             if request.args.get('unpause_on_save'):
                 extra_update_obj['paused'] = False
 
-            # Re #110, if they submit the same as the default value, set it to None, so we continue to follow the default
-            # Assume we use the default value, unless something relevant is different, then use the form value
-            # values could be None, 0 etc.
-            # Set to None unless the next for: says that something is different
-            extra_update_obj['time_between_check'] = dict.fromkeys(form.time_between_check.data)
-            for k, v in form.time_between_check.data.items():
-                if v and v != datastore.data['settings']['requests']['time_between_check'][k]:
-                    extra_update_obj['time_between_check'] = form.time_between_check.data
-                    using_default_check_time = False
-                    break
 
             # Use the default if its the same as system wide
             if form.fetch_backend.data == datastore.data['settings']['application']['fetch_backend']:
@@ -738,13 +727,19 @@ def changedetection_app(config=None, datastore_o=None):
             else:
                 flash("An error occurred, please see below.", "error")
 
+        import datetime
+        datetime = datetime.datetime.now(pytz.timezone(datastore.data['settings']['application'].get('timezone')))
+
         output = render_template("settings.html",
-                                 form=form,
-                                 current_base_url = datastore.data['settings']['application']['base_url'],
-                                 hide_remove_pass=os.getenv("SALTED_PASS", False),
                                  api_key=datastore.data['settings']['application'].get('api_access_token'),
+                                 current_base_url=datastore.data['settings']['application']['base_url'],
+                                 datetime=str(datetime),
                                  emailprefix=os.getenv('NOTIFICATION_MAIL_BUTTON_PREFIX', False),
-                                 settings_application=datastore.data['settings']['application'])
+                                 form=form,
+                                 hide_remove_pass=os.getenv("SALTED_PASS", False),
+                                 settings_application=datastore.data['settings']['application'],
+                                 timezone=datastore.data['settings']['application'].get('timezone')
+                                 )
 
         return output
 
@@ -1454,8 +1449,12 @@ def ticker_thread_check_time_launch_checks():
             seconds_since_last_recheck = now - watch['last_checked']
 
             if seconds_since_last_recheck >= (threshold + watch.jitter_seconds) and seconds_since_last_recheck >= recheck_time_minimum_seconds:
-                if not uuid in running_uuids and uuid not in [q_uuid for p,q_uuid in update_q.queue]:
 
+                if not watch.is_schedule_permitted:
+                    # Skip if the schedule (day of week and time) isnt permitted
+                    continue
+
+                if not uuid in running_uuids and uuid not in [q_uuid for p,q_uuid in update_q.queue]:
                     # Proxies can be set to have a limit on seconds between which they can be called
                     watch_proxy = datastore.get_preferred_proxy_for_watch(uuid=uuid)
                     if watch_proxy and watch_proxy in list(datastore.proxy_list.keys()):

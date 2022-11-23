@@ -1,5 +1,5 @@
 import re
-
+import pytz
 from wtforms import (
     BooleanField,
     Field,
@@ -8,9 +8,11 @@ from wtforms import (
     PasswordField,
     RadioField,
     SelectField,
+    SelectMultipleField,
     StringField,
     SubmitField,
     TextAreaField,
+    TimeField,
     fields,
     validators,
     widgets,
@@ -96,6 +98,44 @@ class TimeBetweenCheckForm(Form):
     minutes = IntegerField('Minutes', validators=[validators.Optional(), validators.NumberRange(min=0, message="Should contain zero or more seconds")])
     seconds = IntegerField('Seconds', validators=[validators.Optional(), validators.NumberRange(min=0, message="Should contain zero or more seconds")])
     # @todo add total seconds minimum validatior = minimum_seconds_recheck_time
+
+class MultiCheckboxDayOfWeekField(SelectMultipleField):
+    widget = widgets.ListWidget(prefix_label=False)
+    option_widget = widgets.CheckboxInput()
+
+class TimeScheduleCheckLimitForm(Form):
+    # @todo must be a better python way todo this c/i list
+    c=[]
+    i=0
+    for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
+        c.append((i, d))
+        i+=1
+    day_of_week = MultiCheckboxDayOfWeekField('',coerce=int, choices=c)
+    from_time = TimeField('From', validators=[validators.Optional()])
+    until_time = TimeField('Until', validators=[validators.Optional()])
+
+    def validate(self, **kwargs):
+        if not super().validate():
+            return False
+
+        result = True
+
+        f = self.data.get('from_time')
+        u = self.data.get('until_time')
+        if f and u:
+            import time
+            f = time.strptime(str(f), '%H:%M:%S')
+            u = time.strptime(str(u), '%H:%M:%S')
+            if f >= u:
+                #@todo doesnt present
+                self.from_time.errors.append('From time must be LESS than the until/end time')
+                result = False
+
+        if len(self.data.get('day_of_week', [])) == 0:
+            self.day_of_week.errors.append('No day selected')
+            result = False
+
+        return result
 
 # Separated by  key:value
 class StringDictKeyValue(StringField):
@@ -347,27 +387,22 @@ class watchForm(commonSettingsForm):
     url = fields.URLField('URL', validators=[validateURL()])
     tag = StringField('Group tag', [validators.Optional()], default='')
 
-    time_between_check = FormField(TimeBetweenCheckForm)
-
-    include_filters = StringListField('CSS/JSONPath/JQ/XPath Filters', [ValidateCSSJSONXPATHInput()], default='')
-
-    subtractive_selectors = StringListField('Remove elements', [ValidateCSSJSONXPATHInput(allow_xpath=False, allow_json=False)])
-
-    extract_text = StringListField('Extract text', [ValidateListRegex()])
-
-    title = StringField('Title', default='')
-
-    ignore_text = StringListField('Ignore text', [ValidateListRegex()])
-    headers = StringDictKeyValue('Request headers')
     body = TextAreaField('Request body', [validators.Optional()])
-    method = SelectField('Request method', choices=valid_method, default=default_method)
-    ignore_status_codes = BooleanField('Ignore status codes (process non-2xx status codes as normal)', default=False)
     check_unique_lines = BooleanField('Only trigger when new lines appear', default=False)
-    trigger_text = StringListField('Trigger/wait for text', [validators.Optional(), ValidateListRegex()])
+    extract_text = StringListField('Extract text', [ValidateListRegex()])
+    headers = StringDictKeyValue('Request headers')
+    ignore_status_codes = BooleanField('Ignore status codes (process non-2xx status codes as normal)', default=False)
+    ignore_text = StringListField('Ignore text', [ValidateListRegex()])
+    include_filters = StringListField('CSS/JSONPath/JQ/XPath Filters', [ValidateCSSJSONXPATHInput()], default='')
+    method = SelectField('Request method', choices=valid_method, default=default_method)
+    subtractive_selectors = StringListField('Remove elements', [ValidateCSSJSONXPATHInput(allow_xpath=False, allow_json=False)])
     text_should_not_be_present = StringListField('Block change-detection if text matches', [validators.Optional(), ValidateListRegex()])
-
+    time_between_check = FormField(TimeBetweenCheckForm)
+    time_schedule_check_limit = FormField(TimeScheduleCheckLimitForm)
+    time_use_system_default = BooleanField('Use system/default check time', default=False, validators=[validators.Optional()])
+    title = StringField('Title', default='')
+    trigger_text = StringListField('Trigger/wait for text', [validators.Optional(), ValidateListRegex()])
     webdriver_js_execute_code = TextAreaField('Execute JavaScript before change detection', render_kw={"rows": "5"}, validators=[validators.Optional()])
-
     save_button = SubmitField('Save', render_kw={"class": "pure-button pure-button-primary"})
 
     proxy = RadioField('Proxy')
@@ -390,10 +425,10 @@ class watchForm(commonSettingsForm):
 
         return result
 
-
 # datastore.data['settings']['requests']..
 class globalSettingsRequestForm(Form):
     time_between_check = FormField(TimeBetweenCheckForm)
+    time_schedule_check_limit = FormField(TimeScheduleCheckLimitForm)
     proxy = RadioField('Proxy')
     jitter_seconds = IntegerField('Random jitter seconds ± check',
                                   render_kw={"style": "width: 5em;"},
@@ -402,21 +437,21 @@ class globalSettingsRequestForm(Form):
 # datastore.data['settings']['application']..
 class globalSettingsApplicationForm(commonSettingsForm):
 
-    base_url = StringField('Base URL', validators=[validators.Optional()])
-    global_subtractive_selectors = StringListField('Remove elements', [ValidateCSSJSONXPATHInput(allow_xpath=False, allow_json=False)])
-    global_ignore_text = StringListField('Ignore Text', [ValidateListRegex()])
-    ignore_whitespace = BooleanField('Ignore whitespace')
-    removepassword_button = SubmitField('Remove password', render_kw={"class": "pure-button pure-button-primary"})
-    empty_pages_are_a_change =  BooleanField('Treat empty pages as a change?', default=False)
-    render_anchor_tag_content = BooleanField('Render anchor tag content', default=False)
-    fetch_backend = RadioField('Fetch Method', default="html_requests", choices=content_fetcher.available_fetchers(), validators=[ValidateContentFetcherIsReady()])
     api_access_token_enabled = BooleanField('API access token security check enabled', default=True, validators=[validators.Optional()])
-    password = SaltyPasswordField()
-
+    base_url = StringField('Base URL', validators=[validators.Optional()])
+    empty_pages_are_a_change =  BooleanField('Treat empty pages as a change?', default=False)
+    fetch_backend = RadioField('Fetch Method', default="html_requests", choices=content_fetcher.available_fetchers(), validators=[ValidateContentFetcherIsReady()])
     filter_failure_notification_threshold_attempts = IntegerField('Number of times the filter can be missing before sending a notification',
                                                                   render_kw={"style": "width: 5em;"},
                                                                   validators=[validators.NumberRange(min=0,
                                                                                                      message="Should contain zero or more attempts")])
+    global_ignore_text = StringListField('Ignore Text', [ValidateListRegex()])
+    global_subtractive_selectors = StringListField('Remove elements', [ValidateCSSJSONXPATHInput(allow_xpath=False, allow_json=False)])
+    ignore_whitespace = BooleanField('Ignore whitespace')
+    password = SaltyPasswordField()
+    removepassword_button = SubmitField('Remove password', render_kw={"class": "pure-button pure-button-primary"})
+    render_anchor_tag_content = BooleanField('Render anchor tag content', default=False)
+    timezone = SelectField('Timezone', choices=pytz.all_timezones)
 
 
 class globalSettingsForm(Form):
