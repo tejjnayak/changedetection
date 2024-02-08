@@ -106,6 +106,7 @@ class Fetcher():
     error = None
     fetcher_description = "No description"
     headers = {}
+    is_plaintext = None
     instock_data = None
     instock_data_js = ""
     status_code = None

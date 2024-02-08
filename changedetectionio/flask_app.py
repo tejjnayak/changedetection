@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from changedetectionio import queuedWatchMetaData
+from changedetectionio import queuedWatchMetaData, html_tools, __version__
 from copy import deepcopy
 from distutils.util import strtobool
 from feedgen.feed import FeedGenerator
@@ -34,8 +34,6 @@ from flask import (
 )
 
 from flask_paginate import Pagination, get_page_parameter
-
-from changedetectionio import html_tools, __version__
 from changedetectionio.api import api_v1
 
 datastore = None
@@ -48,6 +46,18 @@ extra_stylesheets = []
 
 update_q = queue.PriorityQueue()
 notification_q = queue.Queue()
+
+
+def get_plugin_manager():
+    import pluggy
+    from changedetectionio.plugins import hookspecs
+    from changedetectionio.plugins import whois as whois_plugin
+
+    pm = pluggy.PluginManager("changedetectionio_plugin")
+    pm.add_hookspecs(hookspecs)
+    pm.load_setuptools_entrypoints("changedetectionio_plugin")
+    pm.register(whois_plugin)
+    return pm
 
 app = Flask(__name__,
             static_url_path="",
@@ -94,7 +104,6 @@ def init_app_secret(datastore_path):
             f.write(secret)
 
     return secret
-
 
 @app.template_global()
 def get_darkmode_state():
@@ -636,7 +645,6 @@ def changedetection_app(config=None, datastore_o=None):
             form.fetch_backend.choices.append(p)
 
         form.fetch_backend.choices.append(("system", 'System settings default'))
-
         # form.browser_steps[0] can be assumed that we 'goto url' first
 
         if datastore.proxy_list is None:
@@ -737,6 +745,8 @@ def changedetection_app(config=None, datastore_o=None):
             if (watch.get('fetch_backend') == 'system' and system_uses_webdriver) or watch.get('fetch_backend') == 'html_webdriver' or watch.get('fetch_backend', '').startswith('extra_browser_'):
                 is_html_webdriver = True
 
+            processor_config = next((p[2] for p in processors.available_processors() if p[0] == watch.get('processor')), None)
+
             # Only works reliably with Playwright
             visualselector_enabled = os.getenv('PLAYWRIGHT_DRIVER_URL', False) and is_html_webdriver
             output = render_template("edit.html",
@@ -751,6 +761,7 @@ def changedetection_app(config=None, datastore_o=None):
                                      is_html_webdriver=is_html_webdriver,
                                      jq_support=jq_support,
                                      playwright_enabled=os.getenv('PLAYWRIGHT_DRIVER_URL', False),
+                                     processor_config=processor_config,
                                      settings_application=datastore.data['settings']['application'],
                                      using_global_webdriver_wait=default['webdriver_delay'] is None,
                                      uuid=uuid,
@@ -831,11 +842,14 @@ def changedetection_app(config=None, datastore_o=None):
                 flash("An error occurred, please see below.", "error")
 
         output = render_template("settings.html",
-                                 form=form,
-                                 hide_remove_pass=os.getenv("SALTED_PASS", False),
                                  api_key=datastore.data['settings']['application'].get('api_access_token'),
                                  emailprefix=os.getenv('NOTIFICATION_MAIL_BUTTON_PREFIX', False),
-                                 settings_application=datastore.data['settings']['application'])
+                                 form=form,
+                                 hide_remove_pass=os.getenv("SALTED_PASS", False),
+                                 settings_application=datastore.data['settings']['application'],
+                                 plugins=[]
+
+                                 )
 
         return output
 
