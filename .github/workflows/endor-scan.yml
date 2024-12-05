@@ -116,8 +116,9 @@ jobs:
 
       - name: Check Signing Status
         run: echo "Signing status:${{ steps.sign-image.outcome }}"
+             docker ps
         if: ${{ steps.sign-image.outcome == 'success' }}
-        docker ps
+           
 
       - name: Log in to Amazon ECR Public
         run: |
