@@ -3,7 +3,7 @@ name: Build and Push Docker Image to ECR
 on:
   push:
     branches:
-      - main  # Change this to the branch you want to trigger the workflow
+      - master  # Change this to the branch you want to trigger the workflow
 
 jobs:
   build-and-push:
