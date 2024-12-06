@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       id-token: write
       contents: read
@@ -19,15 +19,6 @@ jobs:
 
       - name: Ensure Docker is installed
         run: |
-          if ! [ -x "$(command -v docker)" ]; then
-            echo "Docker not found. Installing Docker..."
-            sudo apt-get update
-            sudo apt-get install -y docker.io
-            sudo systemctl start docker
-            sudo systemctl enable docker
-          else
-            echo "Docker is already installed."
-          fi
           docker --version # Verify Docker installation
 
       # Set up AWS CLI
@@ -82,7 +73,6 @@ jobs:
           log_verbose: true
           log_level: "info"
           project_name: "airflow-docker"
-          scan_summary_output_type: "table"
           image: $IMAGE_NAME:$IMAGE_TAG
 
       # Get Image SHA (before pushing)
