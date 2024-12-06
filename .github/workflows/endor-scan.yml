@@ -20,6 +20,7 @@ jobs:
       - name: Ensure Docker is installed
         run: |
           docker --version # Verify Docker installation
+          
 
       # Set up AWS CLI
       - name: Configure AWS
