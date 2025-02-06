@@ -70,9 +70,6 @@ jobs:
           scan_git_logs: true
           github_token: ${{ secrets.GH_PR_TOKEN }}
           scan_summary_output_type: table
-        run:
-          export ENDOR_JS_ENABLE_TSSERVER=false
-          echo $ENDOR_JS_ENABLE_TSSERVER
         
 
 
