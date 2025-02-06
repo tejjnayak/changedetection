@@ -46,15 +46,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Build and tag Docker image
-      - name: Build Docker Image
-        run: |
-          IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
-          IMAGE_TAG=1.0
-          docker build -t $IMAGE_NAME .
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          docker ps
+      # # Build and tag Docker image
+      # - name: Build Docker Image
+      #   run: |
+      #     IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
+      #     IMAGE_TAG=1.0
+      #     docker build -t $IMAGE_NAME .
+      #     echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+      #     echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+      #     docker ps
 
       - name: Endor Labs SCA Security
         uses: endorlabs/github-action@main
@@ -70,59 +70,60 @@ jobs:
           scan_git_logs: true
           github_token: ${{ secrets.GH_PR_TOKEN }}
           scan_summary_output_type: table
-          scan_container: true
-          log_verbose: true
-          log_level: "info"
-          project_name: "airflow-docker"
-          image: $IMAGE_NAME:$IMAGE_TAG
+        run:
+          export ENDOR_JS_ENABLE_TSSERVER=false
+          echo $ENDOR_JS_ENABLE_TSSERVER
+        
 
-      # Get Image SHA (before pushing)
-      - name: Get Image Digest (SHA)
-        id: get-image-sha
-        run: |
-          IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
-          IMAGE_SHA=$(docker inspect --format='{{.Id}}' $IMAGE_NAME | cut -d':' -f2)
-          echo "IMAGE_SHA=$IMAGE_SHA" >> $GITHUB_ENV
-          docker ps
 
-      # Print Image SHA
-      - name: Print Image SHA
-        run: |
-           echo "Docker image SHA: ${{ env.IMAGE_SHA }}"
-           docker ps
+
+      # # Get Image SHA (before pushing)
+      # - name: Get Image Digest (SHA)
+      #   id: get-image-sha
+      #   run: |
+      #     IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
+      #     IMAGE_SHA=$(docker inspect --format='{{.Id}}' $IMAGE_NAME | cut -d':' -f2)
+      #     echo "IMAGE_SHA=$IMAGE_SHA" >> $GITHUB_ENV
+      #     docker ps
+
+      # # Print Image SHA
+      # - name: Print Image SHA
+      #   run: |
+      #      echo "Docker image SHA: ${{ env.IMAGE_SHA }}"
+      #      docker ps
 
       
-      - name: Get Image Digest to Sign
-        run: |
-          SIGNING_TARGET="$IMAGE_NAME:$IMAGE_TAG@sha256:$IMAGE_SHA"
-          echo ARTIFACT="$SIGNING_TARGET" >> $GITHUB_ENV
-          docker ps
+      # - name: Get Image Digest to Sign
+      #   run: |
+      #     SIGNING_TARGET="$IMAGE_NAME:$IMAGE_TAG@sha256:$IMAGE_SHA"
+      #     echo ARTIFACT="$SIGNING_TARGET" >> $GITHUB_ENV
+      #     docker ps
           
-      - name: Sign with Endor Labs
-        id: sign-image
-        uses: endorlabs/github-action/sign@main
-        with:
-          namespace: "tej-learn"
-          artifact_name: ${{ env.ARTIFACT }}
+      # - name: Sign with Endor Labs
+      #   id: sign-image
+      #   uses: endorlabs/github-action/sign@main
+      #   with:
+      #     namespace: "tej-learn"
+      #     artifact_name: ${{ env.ARTIFACT }}
 
-      - name: Check Signing Status
-        run: echo "Signing status:${{ steps.sign-image.outcome }}"
-             docker ps
-        if: ${{ steps.sign-image.outcome == 'success' }}       
+      # - name: Check Signing Status
+      #   run: echo "Signing status:${{ steps.sign-image.outcome }}"
+      #        docker ps
+      #   if: ${{ steps.sign-image.outcome == 'success' }}       
 
-      - name: Log in to Amazon ECR Public
-        run: |
-            aws ecr-public get-login-password --region us-east-1 \
-            | docker login --username AWS --password-stdin public.ecr.aws
+      # - name: Log in to Amazon ECR Public
+      #   run: |
+      #       aws ecr-public get-login-password --region us-east-1 \
+      #       | docker login --username AWS --password-stdin public.ecr.aws
         
-      # Tag and Push Docker Image to ECR
-      - name: Push Docker Image to Public ECR
-        if: ${{ steps.sign-image.outcome == 'success' }}
-        run: |
-          IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
-          IMAGE_TAG=latest
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-          ECR_URL="public.ecr.aws/n4j1t7b9/tejaswn/airflow-app"
-          docker ps
-          docker tag $IMAGE_NAME:latest $ECR_URL:$IMAGE_TAG
-          docker push $ECR_URL:$IMAGE_TAG
+      # # Tag and Push Docker Image to ECR
+      # - name: Push Docker Image to Public ECR
+      #   if: ${{ steps.sign-image.outcome == 'success' }}
+      #   run: |
+      #     IMAGE_NAME=public.ecr.aws/n4j1t7b9/tejaswn/airflow-app
+      #     IMAGE_TAG=latest
+      #     AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+      #     ECR_URL="public.ecr.aws/n4j1t7b9/tejaswn/airflow-app"
+      #     docker ps
+      #     docker tag $IMAGE_NAME:latest $ECR_URL:$IMAGE_TAG
+      #     docker push $ECR_URL:$IMAGE_TAG
