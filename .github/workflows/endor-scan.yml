@@ -1,4 +1,4 @@
-name: Build and Push Docker Image to ECR
+name: Endor scan and Push to S3
 
 on:
   push:
@@ -70,9 +70,17 @@ jobs:
           scan_git_logs: true
           github_token: ${{ secrets.GH_PR_TOKEN }}
           scan_summary_output_type: table
-        
+          output_file: endor_scan.json
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
+      - name: Upload to S3
+        run: aws s3 cp endor_scan.json s3://tejaswn-test/endor-scan-results/${{ github.sha }}.json --sse AES256
 
       # # Get Image SHA (before pushing)
       # - name: Get Image Digest (SHA)
