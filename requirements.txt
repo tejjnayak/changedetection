@@ -2506,7 +2506,6 @@ safetensors==0.4.3
     #   accelerate
     #   peft
     #   transformers
-scann @ https://files.pythonhosted.org/packages/a6/04/1913f2db3aa1071770f614011485c0af6642e3e792ca2383199acca36ea0/scann-1.3.5-cp310-cp310-manylinux_2_27_x86_64.whl
     # via -r python_scio/requirements/bazel_requirements.in.3.10
 scikit-learn==1.2.2
     # via
@@ -2782,7 +2781,6 @@ tomlkit==0.12.1
     # via -r python_scio/requirements/bazel_requirements.in.3.10
 toolz==1.0.0
     # via altair
-torch @ https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp310-cp310-linux_x86_64.whl#sha256=35a9e78b7e4096968b54c1a198687b981569c50ae93e661aa430f9fd208da102
     # via
     #   -r python_scio/requirements/bazel_requirements.in.3.10
     #   accelerate
@@ -2790,7 +2788,6 @@ torch @ https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp310-cp310-linux
     #   sentence-transformers
     #   stanza
     #   torchvision
-torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.21.0%2Bcpu-cp310-cp310-linux_x86_64.whl#sha256=4ed0a1be50676a7c589ba83b62c9dc0267a87e852b8cd9b7d6db27ab36c6d552
     # via -r python_scio/requirements/bazel_requirements.in.3.10
 tornado==6.5
     # via
