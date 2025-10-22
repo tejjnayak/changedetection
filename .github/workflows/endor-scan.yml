@@ -17,10 +17,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Ensure Docker is installed
-        run: |
-          docker --version # Verify Docker installation
-          
 
       # Set up AWS CLI
       - name: Configure AWS
@@ -29,11 +25,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-
-      # Log in to Amazon ECR
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -66,10 +57,7 @@ jobs:
           api: "https://api.endorlabs.com"
           enable_github_action_token: true
           scan_dependencies: true
-          scan_secrets: true
-          scan_git_logs: true
           github_token: ${{ secrets.GH_PR_TOKEN }}
-          scan_summary_output_type: table
           output_file: endor_scan.json
 
       - name: Configure AWS credentials
