@@ -706,7 +706,6 @@ fastjsonschema==2.18.0
     #   nbformat
 fastmcp==2.11.2
     # via -r python_scio/requirements/bazel_requirements.in.3.10
-fasttext-wheel @ https://files.pythonhosted.org/packages/3a/78/5af1ed52339a6c09277921f56e60cc1c167154147a3038ab77aaaf45ef19/fasttext_wheel-0.9.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     # via -r python_scio/requirements/bazel_requirements.in.3.10
 filelock==3.6.0
     # via
